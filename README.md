@@ -21,7 +21,6 @@ Below is a list of extensions currently available in this repository:
 - **Database**: Integration with popular databases such as PostgreSQL and MySQL.
 - **Logger**: Preconfigured logging solutions using Zap or other logging libraries.
 - **Event**: Support for In-memory, Kafka, RabbitMQ event bus.
-- **Transport**: Tools for building RESTful APIs, gRPC services, and WebSocket communication.
 - **Configuration Management**: Flexible configuration loading using Viper and environment variables.
 
 ---
