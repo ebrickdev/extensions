@@ -1,4 +1,4 @@
-module ebrick.dev/extensions/v1/logger/default
+module github.com/ebrickdev/extensions/v1/logger/default
 
 go 1.22.5
 

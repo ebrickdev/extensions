@@ -32,10 +32,10 @@ To use a specific extension, simply import it in your Go file. For example, to u
 
 ```go
 import (
-	_ "ebrick.dev/extensions/v1/cache/gocache"
-	_ "ebrick.dev/extensions/v1/database/postgresql"
-	_ "ebrick.dev/extensions/v1/event/nats"
-	_ "ebrick.dev/extensions/v1/logger/logrus"
+	_ "github.com/ebrickdev/extensions/v1/cache/gocache"
+	_ "github.com/ebrickdev/extensions/v1/database/postgresql"
+	_ "github.com/ebrickdev/extensions/v1/event/nats"
+	_ "github.com/ebrickdev/extensions/v1/logger/logrus"
 )
 ```
 •	The _ (blank identifier) ensures that the extensions’ init() functions are executed, even if their exported functionality is not directly used in your code.

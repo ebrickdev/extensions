@@ -1,4 +1,4 @@
-module ebrick.dev/extensions/v1/logger/zap
+module github.com/ebrickdev/extensions/v1/logger/zap
 
 go 1.22.5
 

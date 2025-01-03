@@ -1,4 +1,4 @@
-module ebrick.dev/extensions/v1/database/postgresql
+module github.com/ebrickdev/extensions/v1/database/postgresql
 
 go 1.22.5
 

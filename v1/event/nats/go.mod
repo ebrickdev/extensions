@@ -1,4 +1,4 @@
-module ebrick.dev/extensions/v1/event/nats
+module github.com/ebrickdev/extensions/v1/event/nats
 
 go 1.22.5
 

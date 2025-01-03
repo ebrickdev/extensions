@@ -1,4 +1,4 @@
-module ebrick.dev/extensions/v1/cache/redis
+module github.com/ebrickdev/extensions/v1/cache/redis
 
 go 1.22.5
 

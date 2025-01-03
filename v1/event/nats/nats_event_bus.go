@@ -5,12 +5,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
+	"github.com/ebrickdev/ebrick/config"
 	"github.com/ebrickdev/ebrick/event"
 	"github.com/nats-io/nats.go"
 )
+
+func init() {
+	// Get the database configuration from the config package
+	var cfg Config
+	err := config.LoadConfig("application", []string{"."}, &cfg)
+	if err != nil {
+		log.Fatalf("Nats: error loading config %v", err)
+	}
+	// Initialize NATS connection
+	log.Printf("Nats: Connecting to nats on %s \n", cfg.Messaging.Nats.URL)
+	eventBus, err := NewEventBus(cfg.Messaging.Nats.URL, cfg.Messaging.Nats.Username, cfg.Messaging.Nats.Password)
+	if err != nil {
+		log.Fatalf("Nats: error initializing event bus. %v", err)
+	}
+	event.DefaultEventBus = eventBus
+	log.Printf("Nats: Connected to Nats on %s \n", cfg.Messaging.Nats.URL)
+}
 
 type NatsConn interface {
 	Publish(subject string, data []byte) error
