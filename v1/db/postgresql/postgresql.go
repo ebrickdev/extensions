@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/ebrickdev/ebrick/config"
-	"github.com/ebrickdev/ebrick/database"
+	"github.com/ebrickdev/ebrick/db"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -36,10 +36,10 @@ func init() {
 		cfg.Database.Host, cfg.Database.User, cfg.Database.DBName, cfg.Database.SSLMode, cfg.Database.Password)
 
 	// Open a connection to the database
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	ds, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("PostgreSQL: failed to connect to database %v", err)
 	}
-	database.DefaultDataSource = db
+	db.DefaultDataSource = ds
 	log.Println("PostgreSQL: Connected to PostgreSQL database")
 }
