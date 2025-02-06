@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/ebrickdev/ebrick/config"
-	"github.com/ebrickdev/ebrick/event"
+	"github.com/ebrickdev/ebrick/messaging"
 	"github.com/nats-io/nats.go"
 )
 
@@ -27,7 +27,7 @@ func init() {
 	if err != nil {
 		log.Fatalf("Nats: error initializing event bus. %v", err)
 	}
-	event.DefaultEventBus = eventBus
+	messaging.DefaultEventBus = eventBus
 	log.Printf("Nats: Connected to Nats on %s \n", cfg.Messaging.Nats.URL)
 }
 
@@ -60,13 +60,13 @@ func NewEventBus(natsURL, username, password string) (*NatsEventBus, error) {
 }
 
 // Publish sends an event to all subscribers of the specified event type.
-func (b *NatsEventBus) Publish(ctx context.Context, event event.Event) error {
+func (b *NatsEventBus) Publish(ctx context.Context, event messaging.Event) error {
 	if b.isClosed() {
 		return errors.New("eventbus is closed")
 	}
 
 	// Validate the event before publishing
-	if event.Type == "" || event.ID == "" {
+	if messaging.Type == "" || messaging.ID == "" {
 		return errors.New("event must have a valid ID and Type")
 	}
 
@@ -75,7 +75,7 @@ func (b *NatsEventBus) Publish(ctx context.Context, event event.Event) error {
 		return fmt.Errorf("failed to encode event: %w", err)
 	}
 
-	err = b.nc.Publish(event.Type, data)
+	err = b.nc.Publish(messaging.Type, data)
 	if err != nil {
 		return fmt.Errorf("failed to publish event: %w", err)
 	}
@@ -84,7 +84,7 @@ func (b *NatsEventBus) Publish(ctx context.Context, event event.Event) error {
 }
 
 // Subscribe registers a handler for the specified event type and returns an unsubscribe function.
-func (b *NatsEventBus) Subscribe(eventType string, handler func(ctx context.Context, event event.Event)) error {
+func (b *NatsEventBus) Subscribe(eventType string, handler func(ctx context.Context, event messaging.Event)) error {
 	if b.isClosed() {
 		return errors.New("eventbus is closed")
 	}
@@ -125,12 +125,12 @@ func (b *NatsEventBus) isClosed() bool {
 	return b.closed
 }
 
-func encodeEvent(event event.Event) ([]byte, error) {
+func encodeEvent(event messaging.Event) ([]byte, error) {
 	return json.Marshal(event)
 }
 
-func decodeEvent(data []byte) (event.Event, error) {
-	var evt event.Event
+func decodeEvent(data []byte) (messaging.Event, error) {
+	var evt messaging.Event
 	err := json.Unmarshal(data, &evt)
 	return evt, err
 }

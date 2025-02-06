@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ebrickdev/ebrick/event"
+	"github.com/ebrickdev/ebrick/messaging"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
