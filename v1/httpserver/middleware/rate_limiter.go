@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ebrickdev/ebrick/web"
+	"github.com/ebrickdev/ebrick/transport/httpserver"
 	"golang.org/x/time/rate"
 )
 
@@ -45,8 +45,8 @@ func (rl *RateLimiter) getLimiter(client string) *rate.Limiter {
 }
 
 // Middleware enforces rate limiting based on client IP.
-func (rl *RateLimiter) Middleware() web.HandlerFunc {
-	return func(ctx web.Context) {
+func (rl *RateLimiter) Middleware() httpserver.HandlerFunc {
+	return func(ctx httpserver.Context) {
 		clientIP := ctx.ClientIP()
 		limiter := rl.getLimiter(clientIP)
 

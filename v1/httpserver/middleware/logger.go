@@ -4,12 +4,12 @@ import (
 	"time"
 
 	"github.com/ebrickdev/ebrick/logger"
-	"github.com/ebrickdev/ebrick/web"
+	"github.com/ebrickdev/ebrick/transport/httpserver"
 )
 
 // LoggerMiddleware logs request details for each HTTP request
-func RequestLoggingMiddleware(log logger.Logger) web.HandlerFunc {
-	return func(ctx web.Context) {
+func RequestLoggingMiddleware(log logger.Logger) httpserver.HandlerFunc {
+	return func(ctx httpserver.Context) {
 		start := time.Now()
 
 		// Process the request
