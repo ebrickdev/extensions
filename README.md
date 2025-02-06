@@ -33,7 +33,7 @@ To use a specific extension, simply import it in your Go file. For example, to u
 ```go
 import (
 	_ "github.com/ebrickdev/extensions/v1/cache/gocache"
-	_ "github.com/ebrickdev/extensions/v1/database/postgresql"
+	_ "github.com/ebrickdev/extensions/v1/db/postgresql"
 	_ "github.com/ebrickdev/extensions/v1/messaging/nats"
 	_ "github.com/ebrickdev/extensions/v1/logger/logrus"
 )
