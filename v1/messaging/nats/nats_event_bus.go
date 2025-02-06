@@ -66,7 +66,7 @@ func (b *NatsEventBus) Publish(ctx context.Context, event messaging.Event) error
 	}
 
 	// Validate the event before publishing
-	if messaging.Type == "" || messaging.ID == "" {
+	if event.Type == "" || event.ID == "" {
 		return errors.New("event must have a valid ID and Type")
 	}
 
@@ -75,7 +75,7 @@ func (b *NatsEventBus) Publish(ctx context.Context, event messaging.Event) error
 		return fmt.Errorf("failed to encode event: %w", err)
 	}
 
-	err = b.nc.Publish(messaging.Type, data)
+	err = b.nc.Publish(event.Type, data)
 	if err != nil {
 		return fmt.Errorf("failed to publish event: %w", err)
 	}

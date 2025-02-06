@@ -48,7 +48,7 @@ func TestNatsEventBus_Publish(t *testing.T) {
 	mockConn := new(MockNatsConn)
 	bus := NewMockNatsEventBus(mockConn)
 
-	event := event.Event{
+	event := messaging.Event{
 		ID:   "1",
 		Type: "test.event",
 		Data: map[string]any{"key": "value"},
@@ -67,7 +67,7 @@ func TestNatsEventBus_PublishError(t *testing.T) {
 	mockConn := new(MockNatsConn)
 	bus := NewMockNatsEventBus(mockConn)
 
-	event := event.Event{
+	event := messaging.Event{
 		ID:   "1",
 		Type: "test.event",
 		Data: map[string]any{"key": "value"},
@@ -87,7 +87,7 @@ func TestNatsEventBus_Subscribe(t *testing.T) {
 	mockConn := new(MockNatsConn)
 	bus := NewMockNatsEventBus(mockConn)
 
-	handler := func(ctx context.Context, e event.Event) {}
+	handler := func(ctx context.Context, e messaging.Event) {}
 
 	// Mock the Subscribe behavior
 	mockConn.On("Subscribe", "test.event", mock.Anything).Return(nil, nil)
@@ -103,7 +103,7 @@ func TestNatsEventBus_SubscribeError(t *testing.T) {
 	mockConn := new(MockNatsConn)
 	bus := NewMockNatsEventBus(mockConn)
 
-	handler := func(ctx context.Context, e event.Event) {}
+	handler := func(ctx context.Context, e messaging.Event) {}
 
 	// Simulate a subscription error
 	mockConn.On("Subscribe", "test.event", mock.Anything).Return(nil, assert.AnError)
