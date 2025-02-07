@@ -8,14 +8,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func init() {
+func Init() logger.Logger {
 	cfg := config.GetAppConfig()
 	l, err := (New(cfg.Env))
 	if err != nil {
 		log.Fatalf("failed to initialize logger: %v", err)
 	}
-	logger.DefaultLogger = logger.New(l)
-	logger.DefaultLogger.Info("Logrus logger initiated")
+	return logger.New(l)
 }
 
 // LogrusProvider is a concrete implementation of the Logger interface using logrus.Logger.
