@@ -31,6 +31,12 @@ func Init() *gorm.DB {
 	if err != nil {
 		log.Fatalf("PostgreSQL: error loading database config %v", err)
 	}
+
+	// Set default SSL mode to disable if not provided
+	if cfg.Database.SSLMode == "" {
+		cfg.Database.SSLMode = "disable"
+	}
+
 	dsn := fmt.Sprintf("host=%s user=%s dbname=%s sslmode=%s password=%s",
 		cfg.Database.Host, cfg.Database.User, cfg.Database.DBName, cfg.Database.SSLMode, cfg.Database.Password)
 
