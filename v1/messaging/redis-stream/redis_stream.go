@@ -78,7 +78,7 @@ func (r *RedisStream) Publish(ctx context.Context, event messaging.Event) error 
 		return err
 	}
 
-	log.Printf("Published event: %v", event)
+	// log.Printf("Published event: %v", string(eventData))
 	return nil
 }
 
