@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/ebrickdev/ebrick/config"
-	"github.com/ebrickdev/ebrick/db"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -25,7 +24,7 @@ type DatabaseConfig struct {
 }
 
 // InitDB initializes the PostgreSQL database connection and returns a *gorm.DB instance.
-func init() {
+func Init() *gorm.DB {
 	// Get the database configuration from the config package
 	var cfg Config
 	err := config.LoadConfig("application", []string{"."}, &cfg)
@@ -40,6 +39,6 @@ func init() {
 	if err != nil {
 		log.Fatalf("PostgreSQL: failed to connect to database %v", err)
 	}
-	db.DefaultDataSource = ds
 	log.Println("PostgreSQL: Connected to PostgreSQL database")
+	return ds
 }
