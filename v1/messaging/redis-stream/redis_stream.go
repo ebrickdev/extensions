@@ -16,14 +16,14 @@ const (
 	errorSleepDuration = time.Second
 )
 
-// init loads configuration and sets up the default event bus.
-func init() {
+// Init loads configuration and sets up the default event bus.
+func Init() *RedisStream {
 	var cfg Config
 	if err := config.LoadConfig("application", []string{"."}, &cfg); err != nil {
 		log.Fatalf("Redis Stream: error loading config: %v", err)
 	}
 
-	messaging.DefaultEventBus = NewRedisStream(&cfg.Messaging.RedisStream)
+	return NewRedisStream(&cfg.Messaging.RedisStream)
 }
 
 // RedisStream wraps a Redis client.
@@ -59,23 +59,18 @@ func (r *RedisStream) Close() error {
 	return r.client.Close()
 }
 
-// Publish serializes only the event.Data field as JSON and adds the event to the stream.
+// Publish serializes the entire event as JSON and adds it to the stream.
 func (r *RedisStream) Publish(ctx context.Context, event messaging.Event) error {
-	dataBytes, err := json.Marshal(event.Data)
+	eventData, err := json.Marshal(event)
 	if err != nil {
-		log.Printf("Redis Stream: error serializing event data: %v", err)
+		log.Printf("Redis Stream: failed to serialize event: %v", err)
 		return err
 	}
 
 	_, err = r.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: event.Type,
 		Values: map[string]interface{}{
-			"id":          event.ID,
-			"source":      event.Source,
-			"specversion": event.SpecVersion,
-			"type":        event.Type,
-			"data":        string(dataBytes),
-			"time":        event.Time.Format(time.RFC3339),
+			"event": string(eventData),
 		},
 	}).Result()
 	if err != nil {
@@ -87,83 +82,84 @@ func (r *RedisStream) Publish(ctx context.Context, event messaging.Event) error 
 	return nil
 }
 
-// Subscribe creates (if needed) a consumer group and continuously reads messages from the stream.
-// A shared background context is used within the loop.
 func (r *RedisStream) Subscribe(eventType string, handler func(ctx context.Context, event messaging.Event)) error {
 	groupName := fmt.Sprintf("consumer_group_%s", eventType)
 	consumerName := fmt.Sprintf("consumer_%s", eventType)
 	bg := context.Background()
 
-	if err := r.client.XGroupCreateMkStream(bg, eventType, groupName, "$").Err(); err != nil && err != redis.Nil {
-		log.Printf("Redis Stream: error creating consumer group: %v", err)
+	if err := r.createConsumerGroup(bg, eventType, groupName); err != nil {
 		return err
 	}
 
-	go func() {
-		for {
-			res, err := r.client.XReadGroup(bg, &redis.XReadGroupArgs{
-				Group:    groupName,
-				Consumer: consumerName,
-				Streams:  []string{eventType, ">"},
-				Block:    0,
-			}).Result()
-			if err != nil {
-				log.Printf("Redis Stream: error reading from stream: %v", err)
-				time.Sleep(errorSleepDuration)
-				continue
-			}
-
-			for _, stream := range res {
-				for _, message := range stream.Messages {
-					event, parseErr := parseMessage(message)
-					if parseErr != nil {
-						log.Printf("Redis Stream: error parsing message %v: %v", message.ID, parseErr)
-						continue
-					}
-
-					go handler(bg, event)
-
-					if _, ackErr := r.client.XAck(bg, eventType, groupName, message.ID).Result(); ackErr != nil {
-						log.Printf("Redis Stream: failed to acknowledge message %v: %v", message.ID, ackErr)
-					}
-				}
-			}
-		}
-	}()
+	go r.readMessages(bg, eventType, groupName, consumerName, handler)
 
 	log.Printf("Subscribed to events of type: %s", eventType)
 	return nil
 }
 
-// parseMessage extracts and validates fields from a Redis stream message and returns an Event.
-func parseMessage(message redis.XMessage) (messaging.Event, error) {
-	id, idOk := message.Values["id"].(string)
-	source, sourceOk := message.Values["source"].(string)
-	specVersion, specVersionOk := message.Values["specversion"].(string)
-	eventType, typeOk := message.Values["type"].(string)
-	timeStr, timeOk := message.Values["time"].(string)
-	dataJSON, dataOk := message.Values["data"].(string)
-
-	if !idOk || !sourceOk || !specVersionOk || !typeOk || !timeOk || !dataOk {
-		return messaging.Event{}, fmt.Errorf("invalid message format")
-	}
-
-	eventTime, err := time.Parse(time.RFC3339, timeStr)
+// createConsumerGroup handles consumer group creation and BUSYGROUP errors.
+func (r *RedisStream) createConsumerGroup(ctx context.Context, stream, groupName string) error {
+	err := r.client.XGroupCreateMkStream(ctx, stream, groupName, "$").Err()
 	if err != nil {
-		return messaging.Event{}, fmt.Errorf("invalid time format: %v", err)
+		if err.Error() == "BUSYGROUP Consumer Group name already exists" {
+			log.Printf("Redis Stream: consumer group already exists, continuing...")
+			return nil
+		} else if err != redis.Nil {
+			log.Printf("Redis Stream: error creating consumer group: %v", err)
+			return err
+		}
+	}
+	return nil
+}
+
+// readMessages continuously reads messages from the stream and invokes the handler.
+func (r *RedisStream) readMessages(ctx context.Context, stream, group, consumer string, handler func(ctx context.Context, event messaging.Event)) {
+	for {
+		res, err := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    group,
+			Consumer: consumer,
+			Streams:  []string{stream, ">"},
+			Block:    0,
+		}).Result()
+		if err != nil {
+			log.Printf("Redis Stream: error reading from stream: %v", err)
+			time.Sleep(errorSleepDuration)
+			continue
+		}
+		r.processMessages(ctx, res, stream, group, handler)
+	}
+}
+
+// processMessages processes each message, calling the handler and acknowledging the message.
+func (r *RedisStream) processMessages(ctx context.Context, streams []redis.XStream, stream, group string, handler func(ctx context.Context, event messaging.Event)) {
+	for _, s := range streams {
+		for _, message := range s.Messages {
+			event, err := parseMessage(message)
+			if err != nil {
+				log.Printf("Redis Stream: error parsing message %v: %v", message.ID, err)
+				continue
+			}
+
+			go handler(ctx, event)
+
+			if _, ackErr := r.client.XAck(ctx, stream, group, message.ID).Result(); ackErr != nil {
+				log.Printf("Redis Stream: failed to acknowledge message %v: %v", message.ID, ackErr)
+			}
+		}
+	}
+}
+
+// parseMessage unmarshals the event from the Redis stream message.
+func parseMessage(message redis.XMessage) (messaging.Event, error) {
+	eventData, ok := message.Values["event"].(string)
+	if !ok {
+		return messaging.Event{}, fmt.Errorf("invalid message format: missing 'event' field")
 	}
 
-	var eventData map[string]any
-	if err := json.Unmarshal([]byte(dataJSON), &eventData); err != nil {
+	var event messaging.Event
+	if err := json.Unmarshal([]byte(eventData), &event); err != nil {
 		return messaging.Event{}, fmt.Errorf("failed to parse event data: %v", err)
 	}
 
-	return messaging.Event{
-		ID:          id,
-		Source:      source,
-		SpecVersion: specVersion,
-		Type:        eventType,
-		Data:        eventData,
-		Time:        eventTime,
-	}, nil
+	return event, nil
 }
