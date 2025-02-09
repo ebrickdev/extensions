@@ -54,7 +54,7 @@ func NewOIDCAuthManager(ctx context.Context, config OidcConfig) *OIDCAuthManager
 
 	provider, err := oidc.NewProvider(ctx, config.IssuerURL)
 	if err != nil {
-		log.Fatalf("failed to get provider: %w", err)
+		log.Fatalf("failed to get provider: %v", err)
 	}
 
 	oauth2Config := oauth2.Config{
