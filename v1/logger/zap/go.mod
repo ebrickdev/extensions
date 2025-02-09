@@ -3,7 +3,7 @@ module github.com/ebrickdev/extensions/v1/logger/zap
 go 1.22.5
 
 require (
-	github.com/ebrickdev/ebrick v0.9.3
+	github.com/ebrickdev/ebrick v0.10.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.0
 )
