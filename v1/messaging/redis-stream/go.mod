@@ -3,7 +3,7 @@ module github.com/ebrickdev/extensions/v1/messaging/redis-stream
 go 1.22.5
 
 require (
-	github.com/ebrickdev/ebrick v0.10.0
+	github.com/ebrickdev/ebrick v0.11.0
 	github.com/redis/go-redis/v9 v9.7.0
 )
 

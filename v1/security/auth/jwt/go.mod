@@ -3,7 +3,7 @@ module github.com/ebrickdev/extensions/v1/security/auth/jwt
 go 1.22.5
 
 require (
-	github.com/ebrickdev/ebrick v0.10.0
+	github.com/ebrickdev/ebrick v0.11.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/spf13/viper v1.19.0
 )

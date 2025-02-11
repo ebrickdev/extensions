@@ -1,9 +1,9 @@
-module github.com/ebrickdev/extensions/v1/httpserver
+module github.com/ebrickdev/extensions/v1/transport/http
 
 go 1.22.5
 
 require (
-	github.com/ebrickdev/ebrick v0.10.0
+	github.com/ebrickdev/ebrick v0.11.0
 	golang.org/x/time v0.8.0
 )
 

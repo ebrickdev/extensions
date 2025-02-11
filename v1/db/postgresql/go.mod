@@ -3,7 +3,7 @@ module github.com/ebrickdev/extensions/v1/db/postgresql
 go 1.22.5
 
 require (
-	github.com/ebrickdev/ebrick v0.10.0
+	github.com/ebrickdev/ebrick v0.11.0
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
 )
