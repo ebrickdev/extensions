@@ -28,7 +28,7 @@ type RedisConfig struct {
 	Password string
 }
 
-func init() {
+func Init() cache.Cache {
 	// Get the database configuration from the config package
 	var cfg Config
 	err := config.LoadConfig("application", []string{"."}, &cfg)
@@ -52,10 +52,9 @@ func init() {
 		log.Println("Redis: ClientSideExpiration not set, using default value of 5 minutes")
 	}
 
-	cache.DefaultCache = cache.New(NewRedis(
+	return cache.New(NewRedis(
 		cli,
 		store.WithExpiration(time.Duration(cfg.Cache.Expiration)),
 		store.WithClientSideCaching(time.Duration(cfg.Cache.ClientSideExpiration))))
 
-	log.Println("Redis: Connected to redis cache")
 }
