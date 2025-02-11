@@ -41,7 +41,5 @@ func LoadConfig(configName string, configPaths []string) OidcConfig {
 		log.Fatalf("Failed to unmarshal Oidc config: %v", err)
 	}
 
-	log.Default().Println(config)
-
 	return config
 }
