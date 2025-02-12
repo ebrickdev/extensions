@@ -18,12 +18,12 @@ const (
 
 // Init loads configuration and sets up the default event bus.
 func Init() *RedisStream {
-	var cfg *RedisStreamConfig
-	err := config.LoadConfigByKey("application", "messaging.redis", []string{"."}, cfg, map[string]any{})
+	var cfg RedisStreamConfig
+	err := config.LoadConfigByKey("application", "messaging.redis", []string{"."}, &cfg, map[string]any{})
 	if err != nil {
-		return nil
+		log.Fatalf("Redis Stream: unable to load Redis config: %v", err)
 	}
-	return NewRedisStream(cfg)
+	return NewRedisStream(&cfg)
 }
 
 // RedisStream wraps a Redis client.
