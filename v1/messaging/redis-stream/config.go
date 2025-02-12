@@ -2,6 +2,7 @@ package redisstream
 
 import (
 	"log"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -26,16 +27,15 @@ func LoadConfig(configName string, configPaths []string) RedisStreamConfig {
 		viper.AddConfigPath(path)
 	}
 
-	// Set environment variable prefix and enable overrides
-	viper.SetEnvPrefix("MESSAGING_REDIS")
-	viper.AutomaticEnv()
-
 	viper.SetDefault("messaging.redis.url", "localhost:6379")
+	// Set environment variable prefix and enable overrides
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("Failed to read config: %v", err)
 	}
 
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	var config RedisStreamConfig
 	if err := viper.UnmarshalKey("messaging.redis", &config); err != nil {
 		log.Fatalf("Failed to unmarshal config: %v", err)

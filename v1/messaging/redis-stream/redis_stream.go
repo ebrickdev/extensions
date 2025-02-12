@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/ebrickdev/ebrick/config"
 	"github.com/ebrickdev/ebrick/messaging"
 	"github.com/redis/go-redis/v9"
 )
@@ -17,9 +18,12 @@ const (
 
 // Init loads configuration and sets up the default event bus.
 func Init() *RedisStream {
-	cfg := LoadConfig("application", []string{"."})
-
-	return NewRedisStream(&cfg)
+	var cfg *RedisStreamConfig
+	err := config.LoadConfigByKey("application", "messaging.redis", []string{"."}, cfg, map[string]any{})
+	if err != nil {
+		return nil
+	}
+	return NewRedisStream(cfg)
 }
 
 // RedisStream wraps a Redis client.
