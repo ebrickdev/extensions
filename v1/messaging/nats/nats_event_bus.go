@@ -14,7 +14,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-func init() {
+func Init() messaging.EventBus{
 	// Get the database configuration from the config package
 	var cfg Config
 	err := config.LoadConfig("application", []string{"."}, &cfg)
@@ -27,17 +27,11 @@ func init() {
 	if err != nil {
 		log.Fatalf("Nats: error initializing event bus. %v", err)
 	}
-	messaging.DefaultEventBus = eventBus
-	log.Printf("Nats: Connected to Nats on %s \n", cfg.Messaging.Nats.URL)
-}
 
-type NatsConn interface {
-	Publish(subject string, data []byte) error
-	Subscribe(subject string, handler nats.MsgHandler) (*nats.Subscription, error)
-	Close()
+	return eventBus
 }
 type NatsEventBus struct {
-	nc     NatsConn
+	nc     *nats.Conn
 	mu     sync.RWMutex // Protects the closed flag
 	closed bool
 }
@@ -60,10 +54,15 @@ func NewEventBus(natsURL, username, password string) (*NatsEventBus, error) {
 }
 
 // Publish sends an event to all subscribers of the specified event type.
-func (b *NatsEventBus) Publish(ctx context.Context, event messaging.Event) error {
+func (b *NatsEventBus) Publish(ctx context.Context, topic string, event messaging.Event) error {
 	if b.isClosed() {
 		return errors.New("eventbus is closed")
 	}
+
+    // validate topic
+    if topic == "" {
+        return errors.New("topic must not be empty")
+    }
 
 	// Validate the event before publishing
 	if event.Type == "" || event.ID == "" {
@@ -75,7 +74,7 @@ func (b *NatsEventBus) Publish(ctx context.Context, event messaging.Event) error
 		return fmt.Errorf("failed to encode event: %w", err)
 	}
 
-	err = b.nc.Publish(event.Type, data)
+	err = b.nc.Publish(topic, data)
 	if err != nil {
 		return fmt.Errorf("failed to publish event: %w", err)
 	}
@@ -84,25 +83,58 @@ func (b *NatsEventBus) Publish(ctx context.Context, event messaging.Event) error
 }
 
 // Subscribe registers a handler for the specified event type and returns an unsubscribe function.
-func (b *NatsEventBus) Subscribe(eventType string, handler func(ctx context.Context, event messaging.Event)) error {
-	if b.isClosed() {
-		return errors.New("eventbus is closed")
-	}
+func (b *NatsEventBus) Subscribe(topic string, handler func(ctx context.Context, event messaging.Event), options ...messaging.SubscriptionOption) error {
+    if b.isClosed() {
+        return errors.New("eventbus is closed")
+    }
 
-	_, err := b.nc.Subscribe(eventType, func(msg *nats.Msg) {
-		event, err := decodeEvent(msg.Data)
-		if err != nil {
-			fmt.Printf("failed to decode event: %v\n", err)
-			return
-		}
+    // Validate topic before subscribing
+    if topic == "" {
+        return errors.New("topic must not be empty")
+    }
+    
+    // Process subscription options for consumer group and name.
+    opts := messaging.SubscriptionOptions{}
+    for _, o := range options {
+        o(&opts)
+    }
+    
+    // Log subscriber details if a consumer name is provided.
+    if opts.Name != "" {
+        log.Printf("Nats: Subscriber '%s'", opts.Name)
+    }
 
-		go handler(context.Background(), event)
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to event: %w", err)
-	}
+    // If a consumer group is specified, use QueueSubscribe to load balance the messages.
+    if opts.Group != "" {
+        log.Printf("Nats: Joining consumer group '%s' on topic '%s'", opts.Group, topic)
+        _, err := b.nc.QueueSubscribe(topic, opts.Group, func(msg *nats.Msg) {
+            event, err := decodeEvent(msg.Data)
+            if err != nil {
+                log.Printf("failed to decode event: %v", err)
+                return
+            }
+            go handler(context.Background(), event)
+        })
+        if err != nil {
+            return fmt.Errorf("failed to subscribe to event: %w", err)
+        }
+        return nil
+    }
 
-	return nil
+    // Otherwise, use normal Subscribe.
+    _, err := b.nc.Subscribe(topic, func(msg *nats.Msg) {
+        event, err := decodeEvent(msg.Data)
+        if err != nil {
+            log.Printf("failed to decode event: %v", err)
+            return
+        }
+        go handler(context.Background(), event)
+    })
+    if err != nil {
+        return fmt.Errorf("failed to subscribe to event: %w", err)
+    }
+
+    return nil
 }
 
 // Close shuts down the event bus and ensures no new events are processed.
