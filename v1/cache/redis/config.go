@@ -37,7 +37,7 @@ func Init() cache.Cache {
 		log.Fatalf("Redis: error loading config %v", err)
 	}
 	cli := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", cfg.Cache.Redis.Host, cfg.Cache.Redis.Port),
+		Addr:     fmt.Sprintf("%s:%d", cfg.Cache.Redis.Host, cfg.Cache.Redis.Port),
 		Username: cfg.Cache.Redis.Username,
 		Password: cfg.Cache.Redis.Password,
 		DB:       0,
