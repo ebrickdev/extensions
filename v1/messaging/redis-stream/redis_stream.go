@@ -12,9 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const (
-	errorSleepDuration = time.Second
-)
+const errorSleepDuration = time.Second
 
 // Init loads configuration and sets up the default event bus.
 func Init() *RedisStream {
@@ -59,8 +57,8 @@ func (r *RedisStream) Close() error {
 	return r.client.Close()
 }
 
-// Publish serializes the entire event as JSON and adds it to the stream.
-func (r *RedisStream) Publish(ctx context.Context, event messaging.Event) error {
+// Publish serializes the event as JSON and adds it to the specified stream.
+func (r *RedisStream) Publish(ctx context.Context, topic string, event messaging.Event) error {
 	eventData, err := json.Marshal(event)
 	if err != nil {
 		log.Printf("Redis Stream: failed to serialize event: %v", err)
@@ -68,7 +66,7 @@ func (r *RedisStream) Publish(ctx context.Context, event messaging.Event) error 
 	}
 
 	_, err = r.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: event.Type,
+		Stream: topic,
 		Values: map[string]interface{}{
 			"event": string(eventData),
 		},
@@ -77,52 +75,79 @@ func (r *RedisStream) Publish(ctx context.Context, event messaging.Event) error 
 		log.Printf("Redis Stream: failed to publish event: %v", err)
 		return err
 	}
-
-	// log.Printf("Published event: %v", string(eventData))
 	return nil
 }
 
-func (r *RedisStream) Subscribe(eventType string, handler func(ctx context.Context, event messaging.Event)) error {
-	groupName := fmt.Sprintf("consumer_group_%s", eventType)
-	consumerName := fmt.Sprintf("consumer_%s", eventType)
-	bg := context.Background()
-
-	if err := r.createConsumerGroup(bg, eventType, groupName); err != nil {
-		return err
+// Subscribe subscribes to a Redis stream.
+// - If a consumer group is provided (SubscriptionOptions.Group is non-empty),
+//   it uses consumer group semantics (with XREADGroup and offset ">").
+// - Otherwise, it uses a plain XREAD subscription with the fixed offset "$" for new messages.
+// The method accepts a context for cancellation.
+func (r *RedisStream) Subscribe(ctx context.Context, topic string, handler func(ctx context.Context, event messaging.Event), opts ...messaging.SubscriptionOption) error {
+	options := &messaging.SubscriptionOptions{}
+	for _, opt := range opts {
+		opt(options)
 	}
 
-	go r.readMessages(bg, eventType, groupName, consumerName, handler)
+	if options.Group != "" {
+		// Consumer group subscription.
+		groupName := options.Group
+		consumerName := options.Name
+		if consumerName == "" {
+			consumerName = fmt.Sprintf("consumer_%s", topic)
+		}
 
-	log.Printf("Subscribed to events of type: %s", eventType)
+		// Create the consumer group; only new messages (after group creation) are processed.
+		if err := r.createConsumerGroup(ctx, topic, groupName); err != nil {
+			return err
+		}
+
+		// Start reading messages using consumer group semantics (XREADGroup with ">")
+		go r.readMessagesConsumerGroup(ctx, topic, groupName, consumerName, handler)
+		log.Printf("Subscribed to events of type: %s with consumer group: %s and consumer: %s", topic, groupName, consumerName)
+	} else {
+		// Non-consumer group subscription using XREAD.
+		// Always use "$" to only get new messages.
+		go r.readMessagesXRead(ctx, topic, handler)
+		log.Printf("Subscribed to events of type: %s using XREAD", topic)
+	}
 	return nil
 }
 
-// createConsumerGroup handles consumer group creation and BUSYGROUP errors.
+// createConsumerGroup creates a consumer group for the stream.
+// It ignores the BUSYGROUP error if the group already exists.
 func (r *RedisStream) createConsumerGroup(ctx context.Context, stream, groupName string) error {
 	err := r.client.XGroupCreateMkStream(ctx, stream, groupName, "$").Err()
 	if err != nil {
 		if err.Error() == "BUSYGROUP Consumer Group name already exists" {
-			log.Printf("Redis Stream: consumer group already exists, continuing...")
+			log.Printf("Redis Stream: consumer group %s already exists, continuing...", groupName)
 			return nil
-		} else if err != redis.Nil {
-			log.Printf("Redis Stream: error creating consumer group: %v", err)
-			return err
 		}
+		log.Printf("Redis Stream: error creating consumer group: %v", err)
+		return err
 	}
 	return nil
 }
 
-// readMessages continuously reads messages from the stream and invokes the handler.
-func (r *RedisStream) readMessages(ctx context.Context, stream, group, consumer string, handler func(ctx context.Context, event messaging.Event)) {
+// readMessagesConsumerGroup continuously reads messages from the stream using XREADGroup
+// and invokes the handler. It uses ">" as the stream offset to fetch new messages.
+func (r *RedisStream) readMessagesConsumerGroup(ctx context.Context, stream, group, consumer string, handler func(ctx context.Context, event messaging.Event)) {
 	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("Consumer group subscription: stopping message reading for stream %s, consumer %s", stream, consumer)
+			return
+		default:
+		}
+
 		res, err := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    group,
 			Consumer: consumer,
 			Streams:  []string{stream, ">"},
-			Block:    0,
+			Block:    0, // Block indefinitely until a message arrives.
 		}).Result()
 		if err != nil {
-			log.Printf("Redis Stream: error reading from stream: %v", err)
+			log.Printf("Consumer group subscription: error reading from stream: %v", err)
 			time.Sleep(errorSleepDuration)
 			continue
 		}
@@ -130,21 +155,63 @@ func (r *RedisStream) readMessages(ctx context.Context, stream, group, consumer 
 	}
 }
 
-// processMessages processes each message, calling the handler and acknowledging the message.
+// readMessagesXRead continuously reads messages from the stream using XREAD
+// and invokes the handler using a fixed start offset of "$" to process only new messages.
+func (r *RedisStream) readMessagesXRead(ctx context.Context, stream string, handler func(ctx context.Context, event messaging.Event)) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("XREAD subscription: stopping message reading for stream %s", stream)
+			return
+		default:
+		}
+
+		res, err := r.client.XRead(ctx, &redis.XReadArgs{
+			Streams: []string{stream, "$"},
+			Block:   0, // Block indefinitely until a message arrives.
+		}).Result()
+		if err != nil {
+			log.Printf("XREAD subscription: error reading from stream: %v", err)
+			time.Sleep(errorSleepDuration)
+			continue
+		}
+		r.processMessagesXRead(ctx, res, stream, handler)
+	}
+}
+
+// processMessages processes each message from consumer group subscriptions,
+// calling the handler and acknowledging the message.
 func (r *RedisStream) processMessages(ctx context.Context, streams []redis.XStream, stream, group string, handler func(ctx context.Context, event messaging.Event)) {
 	for _, s := range streams {
 		for _, message := range s.Messages {
 			event, err := parseMessage(message)
 			if err != nil {
-				log.Printf("Redis Stream: error parsing message %v: %v", message.ID, err)
+				log.Printf("Consumer group subscription: error parsing message %v: %v", message.ID, err)
 				continue
 			}
 
+			// Process the event concurrently.
+			// For high volume, consider limiting concurrency.
 			go handler(ctx, event)
 
 			if _, ackErr := r.client.XAck(ctx, stream, group, message.ID).Result(); ackErr != nil {
-				log.Printf("Redis Stream: failed to acknowledge message %v: %v", message.ID, ackErr)
+				log.Printf("Consumer group subscription: failed to acknowledge message %v: %v", message.ID, ackErr)
 			}
+		}
+	}
+}
+
+// processMessagesXRead processes each message from non-consumer group subscriptions
+// and calls the handler.
+func (r *RedisStream) processMessagesXRead(ctx context.Context, streams []redis.XStream, stream string, handler func(ctx context.Context, event messaging.Event)) {
+	for _, s := range streams {
+		for _, message := range s.Messages {
+			event, err := parseMessage(message)
+			if err != nil {
+				log.Printf("XREAD subscription: error parsing message %v: %v", message.ID, err)
+				continue
+			}
+			go handler(ctx, event)
 		}
 	}
 }
