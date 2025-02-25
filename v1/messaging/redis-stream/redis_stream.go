@@ -79,11 +79,13 @@ func (r *RedisStream) Publish(ctx context.Context, topic string, event messaging
 }
 
 // Subscribe subscribes to a Redis stream.
-// - If a consumer group is provided (SubscriptionOptions.Group is non-empty),
-//   it uses consumer group semantics (with XREADGroup and offset ">").
-// - Otherwise, it uses a plain XREAD subscription with the fixed offset "$" for new messages.
+//   - If a consumer group is provided (SubscriptionOptions.Group is non-empty),
+//     it uses consumer group semantics (with XREADGroup and offset ">").
+//   - Otherwise, it uses a plain XREAD subscription with the fixed offset "$" for new messages.
+//
 // The method accepts a context for cancellation.
-func (r *RedisStream) Subscribe(ctx context.Context, topic string, handler func(ctx context.Context, event messaging.Event), opts ...messaging.SubscriptionOption) error {
+func (r *RedisStream) Subscribe(topic string, handler func(ctx context.Context, event messaging.Event), opts ...messaging.SubscriptionOption) error {
+	ctx := context.Background()
 	options := &messaging.SubscriptionOptions{}
 	for _, opt := range opts {
 		opt(options)
