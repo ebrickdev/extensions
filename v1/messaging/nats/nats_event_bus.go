@@ -9,12 +9,13 @@ import (
 	"sync"
 	"time"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/ebrickdev/ebrick/config"
 	"github.com/ebrickdev/ebrick/messaging"
 	"github.com/nats-io/nats.go"
 )
 
-func Init() messaging.EventBus{
+func Init() messaging.EventBus {
 	// Get the database configuration from the config package
 	var cfg Config
 	err := config.LoadConfig("application", []string{"."}, &cfg)
@@ -30,6 +31,7 @@ func Init() messaging.EventBus{
 
 	return eventBus
 }
+
 type NatsEventBus struct {
 	nc     *nats.Conn
 	mu     sync.RWMutex // Protects the closed flag
@@ -54,18 +56,18 @@ func NewEventBus(natsURL, username, password string) (*NatsEventBus, error) {
 }
 
 // Publish sends an event to all subscribers of the specified event type.
-func (b *NatsEventBus) Publish(ctx context.Context, topic string, event messaging.Event) error {
+func (b *NatsEventBus) Publish(ctx context.Context, topic string, event cloudevents.Event) error {
 	if b.isClosed() {
 		return errors.New("eventbus is closed")
 	}
 
-    // validate topic
-    if topic == "" {
-        return errors.New("topic must not be empty")
-    }
+	// validate topic
+	if topic == "" {
+		return errors.New("topic must not be empty")
+	}
 
 	// Validate the event before publishing
-	if event.Type == "" || event.ID == "" {
+	if event.Type() == "" || event.ID() == "" {
 		return errors.New("event must have a valid ID and Type")
 	}
 
@@ -83,58 +85,58 @@ func (b *NatsEventBus) Publish(ctx context.Context, topic string, event messagin
 }
 
 // Subscribe registers a handler for the specified event type and returns an unsubscribe function.
-func (b *NatsEventBus) Subscribe(topic string, handler func(ctx context.Context, event messaging.Event), options ...messaging.SubscriptionOption) error {
-    if b.isClosed() {
-        return errors.New("eventbus is closed")
-    }
+func (b *NatsEventBus) Subscribe(topic string, handler func(ctx context.Context, event cloudevents.Event), options ...messaging.SubscriptionOption) error {
+	if b.isClosed() {
+		return errors.New("eventbus is closed")
+	}
 
-    // Validate topic before subscribing
-    if topic == "" {
-        return errors.New("topic must not be empty")
-    }
-    
-    // Process subscription options for consumer group and name.
-    opts := messaging.SubscriptionOptions{}
-    for _, o := range options {
-        o(&opts)
-    }
-    
-    // Log subscriber details if a consumer name is provided.
-    if opts.Name != "" {
-        log.Printf("Nats: Subscriber '%s'", opts.Name)
-    }
+	// Validate topic before subscribing
+	if topic == "" {
+		return errors.New("topic must not be empty")
+	}
 
-    // If a consumer group is specified, use QueueSubscribe to load balance the messages.
-    if opts.Group != "" {
-        log.Printf("Nats: Joining consumer group '%s' on topic '%s'", opts.Group, topic)
-        _, err := b.nc.QueueSubscribe(topic, opts.Group, func(msg *nats.Msg) {
-            event, err := decodeEvent(msg.Data)
-            if err != nil {
-                log.Printf("failed to decode event: %v", err)
-                return
-            }
-            go handler(context.Background(), event)
-        })
-        if err != nil {
-            return fmt.Errorf("failed to subscribe to event: %w", err)
-        }
-        return nil
-    }
+	// Process subscription options for consumer group and name.
+	opts := messaging.SubscriptionOptions{}
+	for _, o := range options {
+		o(&opts)
+	}
 
-    // Otherwise, use normal Subscribe.
-    _, err := b.nc.Subscribe(topic, func(msg *nats.Msg) {
-        event, err := decodeEvent(msg.Data)
-        if err != nil {
-            log.Printf("failed to decode event: %v", err)
-            return
-        }
-        go handler(context.Background(), event)
-    })
-    if err != nil {
-        return fmt.Errorf("failed to subscribe to event: %w", err)
-    }
+	// Log subscriber details if a consumer name is provided.
+	if opts.Name != "" {
+		log.Printf("Nats: Subscriber '%s'", opts.Name)
+	}
 
-    return nil
+	// If a consumer group is specified, use QueueSubscribe to load balance the messages.
+	if opts.Group != "" {
+		log.Printf("Nats: Joining consumer group '%s' on topic '%s'", opts.Group, topic)
+		_, err := b.nc.QueueSubscribe(topic, opts.Group, func(msg *nats.Msg) {
+			event, err := decodeEvent(msg.Data)
+			if err != nil {
+				log.Printf("failed to decode event: %v", err)
+				return
+			}
+			go handler(context.Background(), event)
+		})
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to event: %w", err)
+		}
+		return nil
+	}
+
+	// Otherwise, use normal Subscribe.
+	_, err := b.nc.Subscribe(topic, func(msg *nats.Msg) {
+		event, err := decodeEvent(msg.Data)
+		if err != nil {
+			log.Printf("failed to decode event: %v", err)
+			return
+		}
+		go handler(context.Background(), event)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to event: %w", err)
+	}
+
+	return nil
 }
 
 // Close shuts down the event bus and ensures no new events are processed.
@@ -157,12 +159,12 @@ func (b *NatsEventBus) isClosed() bool {
 	return b.closed
 }
 
-func encodeEvent(event messaging.Event) ([]byte, error) {
+func encodeEvent(event cloudevents.Event) ([]byte, error) {
 	return json.Marshal(event)
 }
 
-func decodeEvent(data []byte) (messaging.Event, error) {
-	var evt messaging.Event
+func decodeEvent(data []byte) (cloudevents.Event, error) {
+	var evt cloudevents.Event
 	err := json.Unmarshal(data, &evt)
 	return evt, err
 }

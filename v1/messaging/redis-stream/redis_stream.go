@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/ebrickdev/ebrick/config"
 	"github.com/ebrickdev/ebrick/messaging"
 	"github.com/redis/go-redis/v9"
@@ -58,7 +59,7 @@ func (r *RedisStream) Close() error {
 }
 
 // Publish serializes the event as JSON and adds it to the specified stream.
-func (r *RedisStream) Publish(ctx context.Context, topic string, event messaging.Event) error {
+func (r *RedisStream) Publish(ctx context.Context, topic string, event cloudevents.Event) error {
 	eventData, err := json.Marshal(event)
 	if err != nil {
 		log.Printf("Redis Stream: failed to serialize event: %v", err)
@@ -84,7 +85,7 @@ func (r *RedisStream) Publish(ctx context.Context, topic string, event messaging
 //   - Otherwise, it uses a plain XREAD subscription with the fixed offset "$" for new messages.
 //
 // The method accepts a context for cancellation.
-func (r *RedisStream) Subscribe(topic string, handler func(ctx context.Context, event messaging.Event), opts ...messaging.SubscriptionOption) error {
+func (r *RedisStream) Subscribe(topic string, handler func(ctx context.Context, event cloudevents.Event), opts ...messaging.SubscriptionOption) error {
 	ctx := context.Background()
 	options := &messaging.SubscriptionOptions{}
 	for _, opt := range opts {
@@ -133,7 +134,7 @@ func (r *RedisStream) createConsumerGroup(ctx context.Context, stream, groupName
 
 // readMessagesConsumerGroup continuously reads messages from the stream using XREADGroup
 // and invokes the handler. It uses ">" as the stream offset to fetch new messages.
-func (r *RedisStream) readMessagesConsumerGroup(ctx context.Context, stream, group, consumer string, handler func(ctx context.Context, event messaging.Event)) {
+func (r *RedisStream) readMessagesConsumerGroup(ctx context.Context, stream, group, consumer string, handler func(ctx context.Context, event cloudevents.Event)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -159,7 +160,7 @@ func (r *RedisStream) readMessagesConsumerGroup(ctx context.Context, stream, gro
 
 // readMessagesXRead continuously reads messages from the stream using XREAD
 // and invokes the handler using a fixed start offset of "$" to process only new messages.
-func (r *RedisStream) readMessagesXRead(ctx context.Context, stream string, handler func(ctx context.Context, event messaging.Event)) {
+func (r *RedisStream) readMessagesXRead(ctx context.Context, stream string, handler func(ctx context.Context, event cloudevents.Event)) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -183,7 +184,7 @@ func (r *RedisStream) readMessagesXRead(ctx context.Context, stream string, hand
 
 // processMessages processes each message from consumer group subscriptions,
 // calling the handler and acknowledging the message.
-func (r *RedisStream) processMessages(ctx context.Context, streams []redis.XStream, stream, group string, handler func(ctx context.Context, event messaging.Event)) {
+func (r *RedisStream) processMessages(ctx context.Context, streams []redis.XStream, stream, group string, handler func(ctx context.Context, event cloudevents.Event)) {
 	for _, s := range streams {
 		for _, message := range s.Messages {
 			event, err := parseMessage(message)
@@ -205,7 +206,7 @@ func (r *RedisStream) processMessages(ctx context.Context, streams []redis.XStre
 
 // processMessagesXRead processes each message from non-consumer group subscriptions
 // and calls the handler.
-func (r *RedisStream) processMessagesXRead(ctx context.Context, streams []redis.XStream, stream string, handler func(ctx context.Context, event messaging.Event)) {
+func (r *RedisStream) processMessagesXRead(ctx context.Context, streams []redis.XStream, stream string, handler func(ctx context.Context, event cloudevents.Event)) {
 	for _, s := range streams {
 		for _, message := range s.Messages {
 			event, err := parseMessage(message)
@@ -219,15 +220,15 @@ func (r *RedisStream) processMessagesXRead(ctx context.Context, streams []redis.
 }
 
 // parseMessage unmarshals the event from the Redis stream message.
-func parseMessage(message redis.XMessage) (messaging.Event, error) {
+func parseMessage(message redis.XMessage) (cloudevents.Event, error) {
 	eventData, ok := message.Values["event"].(string)
 	if !ok {
-		return messaging.Event{}, fmt.Errorf("invalid message format: missing 'event' field")
+		return cloudevents.Event{}, fmt.Errorf("invalid message format: missing 'event' field")
 	}
 
-	var event messaging.Event
+	var event cloudevents.Event
 	if err := json.Unmarshal([]byte(eventData), &event); err != nil {
-		return messaging.Event{}, fmt.Errorf("failed to parse event data: %v", err)
+		return cloudevents.Event{}, fmt.Errorf("failed to parse event data: %v", err)
 	}
 
 	return event, nil
